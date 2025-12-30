@@ -48,9 +48,13 @@ export interface SessionResponse {
 }
 
 export interface NarrativeResponse {
-    id: number;
+    id: string;
     timestamp: string;
     content: string;
+}
+
+export interface NarrativeProviderResponse {
+    provider: 'gemini' | 'claude';
 }
 
 export interface KeyLevel {
@@ -78,16 +82,39 @@ export interface AlertRule {
 }
 
 export interface TradeLog {
-    id: number;
+    trade_id: string;
+    timestamp: string;
     symbol: string;
-    entry_time: string;
-    entry_price: number;
-    exit_time?: string;
-    exit_price?: number;
     direction: 'LONG' | 'SHORT';
-    volume: number;
-    pnl?: number;
-    status: 'OPEN' | 'CLOSED';
+    entry_price: number;
+    position_size: number;
+    exit_price?: number;
+    profit_loss_pips?: number;
+    profit_loss_amount?: number;
+    trade_duration_minutes?: number;
+    pre_trade_confidence?: number;
+    post_trade_evaluation?: string;
+    lessons_learned?: string;
+    entry_context?: {
+        context_type: 'entry';
+        session?: string;
+        market_condition?: string;
+        ai_narrative_summary?: string;
+        active_scenarios: string[];
+        key_levels_nearby: number[];
+        correlation_status: Record<string, number>;
+        economic_events_upcoming: string[];
+    };
+    exit_context?: {
+        context_type: 'exit';
+        session?: string;
+        market_condition?: string;
+        ai_narrative_summary?: string;
+        active_scenarios: string[];
+        key_levels_nearby: number[];
+        correlation_status: Record<string, number>;
+        economic_events_upcoming: string[];
+    };
 }
 
 export interface TradeStats {
@@ -121,6 +148,16 @@ export const getLatestNarrative = async (): Promise<NarrativeResponse | null> =>
 
 export const generateMarketNarrative = async (): Promise<NarrativeResponse> => {
     const response = await api.post<NarrativeResponse>('/narratives/generate');
+    return response.data;
+};
+
+export const getNarrativeProvider = async (): Promise<NarrativeProviderResponse> => {
+    const response = await api.get<NarrativeProviderResponse>('/settings/narrative-provider');
+    return response.data;
+};
+
+export const setNarrativeProvider = async (provider: 'gemini' | 'claude'): Promise<NarrativeProviderResponse> => {
+    const response = await api.put<NarrativeProviderResponse>('/settings/narrative-provider', { provider });
     return response.data;
 };
 

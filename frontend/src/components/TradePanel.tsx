@@ -12,7 +12,7 @@ const TradePanel = () => {
     const [symbol, setSymbol] = useState('USDJPY');
     const [direction, setDirection] = useState<'LONG' | 'SHORT'>('LONG');
     const [entryPrice, setEntryPrice] = useState('');
-    const [volume, setVolume] = useState('0.1');
+    const [positionSize, setPositionSize] = useState('0.1');
 
     const fetchData = async () => {
         setLoading(true);
@@ -37,9 +37,7 @@ const TradePanel = () => {
                 symbol,
                 direction,
                 entry_price: parseFloat(entryPrice),
-                volume: parseFloat(volume),
-                entry_time: new Date().toISOString(),
-                status: 'OPEN'
+                position_size: parseFloat(positionSize)
             });
             await fetchData();
             setEntryPrice('');
@@ -93,8 +91,8 @@ const TradePanel = () => {
                     placeholder="Entry" className="bg-background border rounded px-2 py-1 text-sm w-20" required
                 />
                 <input
-                    type="number" step="0.01" value={volume} onChange={e => setVolume(e.target.value)}
-                    placeholder="Vol" className="bg-background border rounded px-2 py-1 text-sm w-16" required
+                    type="number" step="0.01" value={positionSize} onChange={e => setPositionSize(e.target.value)}
+                    placeholder="Size" className="bg-background border rounded px-2 py-1 text-sm w-16" required
                 />
                 <button type="submit" className="bg-emerald-600 text-white p-1.5 rounded hover:bg-emerald-700">
                     <Plus className="w-4 h-4" />
@@ -106,7 +104,7 @@ const TradePanel = () => {
                     <div className="text-center text-muted-foreground text-sm py-4">No logged trades</div>
                 ) : (
                     trades.slice().reverse().map(trade => (
-                        <div key={trade.id} className="flex justify-between items-center p-2 border rounded bg-card hover:bg-muted/50 transition-colors">
+                        <div key={trade.trade_id} className="flex justify-between items-center p-2 border rounded bg-card hover:bg-muted/50 transition-colors">
                             <div className="flex items-center gap-2">
                                 <span className={cn(
                                     "px-1.5 py-0.5 text-[10px] font-bold rounded",
@@ -120,12 +118,12 @@ const TradePanel = () => {
                             <div className="text-right">
                                 <span className={cn(
                                     "text-sm font-bold block",
-                                    (trade.pnl || 0) >= 0 ? "text-green-500" : "text-red-500"
+                                    ((trade.profit_loss_amount || 0) >= 0) ? "text-green-500" : "text-red-500"
                                 )}>
-                                    {trade.pnl != null ? trade.pnl : "OPEN"}
+                                    {trade.profit_loss_amount != null ? trade.profit_loss_amount : "OPEN"}
                                 </span>
                                 <span className="text-[10px] text-muted-foreground">
-                                    {new Date(trade.entry_time).toLocaleDateString()}
+                                    {new Date(trade.timestamp).toLocaleDateString()}
                                 </span>
                             </div>
                         </div>

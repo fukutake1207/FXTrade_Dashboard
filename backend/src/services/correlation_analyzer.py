@@ -37,7 +37,7 @@ class CorrelationAnalyzer:
         # Calculate USDJPY returns if not already calculated
         if 'returns' not in usdjpy_history.columns:
             # Assuming 'close' column exists
-             usdjpy_returns = usdjpy_history['close'].pct_change()
+            usdjpy_returns = usdjpy_history['close'].pct_change()
         else:
             usdjpy_returns = usdjpy_history['returns']
 

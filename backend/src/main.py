@@ -21,7 +21,7 @@ else:
     logger.error("GEMINI_API_KEY NOT FOUND after loading .env!")
 
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import prices, trades, correlations, sessions, narratives, scenarios, alerts
+from .routers import prices, trades, correlations, sessions, narratives, scenarios, alerts, settings
 from .services.data_collector import data_collector
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
@@ -36,8 +36,7 @@ app = FastAPI(
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "*"
+    "http://localhost:3000"
 ]
 
 app.add_middleware(
@@ -55,6 +54,7 @@ app.include_router(sessions.router)
 app.include_router(narratives.router)
 app.include_router(scenarios.router)
 app.include_router(alerts.router)
+app.include_router(settings.router)
 
 # Scheduler for background tasks
 scheduler = AsyncIOScheduler()

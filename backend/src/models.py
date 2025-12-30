@@ -23,7 +23,7 @@ class TradeLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    context = relationship("TradeContext", back_populates="trade", uselist=False)
+    contexts = relationship("TradeContext", back_populates="trade")
 
 class TradeContext(Base):
     __tablename__ = "trade_contexts"
@@ -39,7 +39,7 @@ class TradeContext(Base):
     correlation_status = Column(Text) # JSON string
     economic_events_upcoming = Column(Text) # JSON string
 
-    trade = relationship("TradeLog", back_populates="context")
+    trade = relationship("TradeLog", back_populates="contexts")
 
     def set_active_scenarios(self, data: list):
         self.active_scenarios = json.dumps(data)

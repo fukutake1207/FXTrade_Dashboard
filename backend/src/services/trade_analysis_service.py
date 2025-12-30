@@ -17,14 +17,14 @@ class TradeAnalysisService:
                 "total_pnl": 0.0
             }
             
-        wins = [t for t in trades if (t.pnl or 0) > 0]
-        losses = [t for t in trades if (t.pnl or 0) < 0]
+        wins = [t for t in trades if (t.profit_loss_amount or 0) > 0]
+        losses = [t for t in trades if (t.profit_loss_amount or 0) < 0]
         
         win_count = len(wins)
         loss_count = len(losses)
         
-        gross_profit = sum(t.pnl for t in wins)
-        gross_loss = abs(sum(t.pnl for t in losses))
+        gross_profit = sum(t.profit_loss_amount or 0 for t in wins)
+        gross_loss = abs(sum(t.profit_loss_amount or 0 for t in losses))
         
         win_rate = (win_count / total_trades) * 100 if total_trades > 0 else 0
         profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else 9.99 # Cap or inf

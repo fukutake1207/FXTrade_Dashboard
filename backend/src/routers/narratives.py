@@ -8,6 +8,8 @@ from datetime import datetime
 from ..database import get_db
 from ..models import HistoricalNarrative
 from ..services.gemini_service import gemini_service
+from ..services.claude_service import claude_service
+from ..services.narrative_provider import get_provider
 from ..services.market_data_service import market_data_service
 from ..services.correlation_analyzer import correlation_analyzer
 from ..services.mt5_service import mt5_service
@@ -21,7 +23,7 @@ router = APIRouter(
 )
 
 class NarrativeResponse(BaseModel):
-    id: int
+    id: str
     timestamp: datetime
     content: str
     
@@ -39,7 +41,7 @@ async def get_latest_narrative(db: AsyncSession = Depends(get_db)):
         return None
         
     return NarrativeResponse(
-        id=0, # Dummy ID as actual ID is string UUID
+        id=narrative.narrative_id,
         timestamp=narrative.generated_at,
         content=narrative.content
     )
@@ -73,8 +75,12 @@ async def generate_narrative(db: AsyncSession = Depends(get_db)):
         "timestamp": datetime.now().isoformat()
     }
     
-    # 3. Call Gemini
-    content = await gemini_service.generate_market_narrative(context_data)
+    # 3. Call AI Provider (default: Gemini, switchable via env)
+    provider = get_provider()
+    if provider == "claude":
+        content = await claude_service.generate_market_narrative(context_data)
+    else:
+        content = await gemini_service.generate_market_narrative(context_data)
     
     # 4. Save to DB
     import uuid
@@ -94,7 +100,7 @@ async def generate_narrative(db: AsyncSession = Depends(get_db)):
     # The response model expects 'timestamp'. We should update it too or map it.
     # Actually, let's just cheat and return an object with the right fields for Pydantic
     return NarrativeResponse(
-        id=0, # Dummy ID for Pydantic, real ID is UUID string
+        id=new_narrative.narrative_id,
         timestamp=new_narrative.generated_at,
         content=new_narrative.content
     )

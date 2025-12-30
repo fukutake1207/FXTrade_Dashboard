@@ -13,8 +13,8 @@ from pydantic import BaseModel
 # Let's stick to design doc specific times relative to JST for consistency
 SESSION_DEFINITIONS = {
     "tokyo": {"name": "Tokyo", "start": time(9, 0), "end": time(15, 0), "color": "bg-blue-500"},
-    "london": {"name": "London", "start": time(16, 0), "end": time(1, 0), "color": "bg-yellow-500"}, # Adjusted slightly for overlap
-    "newyork": {"name": "New York", "start": time(21, 0), "end": time(6, 0), "color": "bg-green-500"}
+    "london": {"name": "London", "start": time(17, 0), "end": time(2, 0), "color": "bg-yellow-500"},
+    "newyork": {"name": "New York", "start": time(22, 0), "end": time(7, 0), "color": "bg-green-500"}
 }
 
 class SessionInfo(BaseModel):

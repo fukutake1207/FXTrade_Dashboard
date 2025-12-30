@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getLatestNarrative, generateMarketNarrative, NarrativeResponse } from '../lib/api';
+import { getLatestNarrative, generateMarketNarrative, NarrativeResponse, getNarrativeProvider, setNarrativeProvider } from '../lib/api';
 import { Bot, Sparkles, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -7,6 +7,8 @@ const NarrativePanel = () => {
     const [narrative, setNarrative] = useState<NarrativeResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [generating, setGenerating] = useState(false);
+    const [provider, setProvider] = useState<'gemini' | 'claude'>('gemini');
+    const [switching, setSwitching] = useState(false);
 
     const fetchLatest = async () => {
         setLoading(true);
@@ -17,6 +19,28 @@ const NarrativePanel = () => {
             console.error("Failed to fetch narrative", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchProvider = async () => {
+        try {
+            const data = await getNarrativeProvider();
+            setProvider(data.provider);
+        } catch (error) {
+            console.error("Failed to fetch provider", error);
+        }
+    };
+
+    const handleSwitch = async (next: 'gemini' | 'claude') => {
+        if (next === provider) return;
+        setSwitching(true);
+        try {
+            const data = await setNarrativeProvider(next);
+            setProvider(data.provider);
+        } catch (error) {
+            console.error("Failed to switch provider", error);
+        } finally {
+            setSwitching(false);
         }
     };
 
@@ -34,6 +58,7 @@ const NarrativePanel = () => {
 
     useEffect(() => {
         fetchLatest();
+        fetchProvider();
     }, []);
 
     return (
@@ -43,6 +68,28 @@ const NarrativePanel = () => {
                     <Bot className="w-5 h-5 text-indigo-500" /> AI Market Narrative
                 </h2>
                 <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 bg-muted/50 border border-border/60 rounded-md p-1">
+                        <button
+                            onClick={() => handleSwitch('gemini')}
+                            disabled={switching}
+                            className={cn(
+                                "px-2 py-0.5 text-[10px] font-semibold rounded",
+                                provider === 'gemini' ? "bg-indigo-600 text-white" : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            Gemini
+                        </button>
+                        <button
+                            onClick={() => handleSwitch('claude')}
+                            disabled={switching}
+                            className={cn(
+                                "px-2 py-0.5 text-[10px] font-semibold rounded",
+                                provider === 'claude' ? "bg-indigo-600 text-white" : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            Claude
+                        </button>
+                    </div>
                     {narrative && (
                         <span className="text-xs text-muted-foreground">
                             {new Date(narrative.timestamp).toLocaleString()}

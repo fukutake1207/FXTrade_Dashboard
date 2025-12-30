@@ -109,7 +109,7 @@ class DataCollectorService:
             existing_stat.volatility = stat.volatility
         else:
              # Since stat_id is primary key, handle generation if not in basic stat
-            if not hasattr(stat, 'stat_id'):
+            if not stat.stat_id:
                 import uuid
                 stat.stat_id = str(uuid.uuid4())
             db.add(stat)

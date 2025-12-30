@@ -6,6 +6,52 @@ import { cn } from '../lib/utils';
 const SessionPanel = () => {
     const [data, setData] = useState<SessionResponse | null>(null);
 
+    const toMinutes = (timeStr: string) => {
+        const [h, m] = timeStr.split(':').map(Number);
+        return (h * 60) + (m || 0);
+    };
+
+    const buildSessionBlocks = () => {
+        if (!data) return [];
+        return Object.values(data.sessions).flatMap(session => {
+            const start = toMinutes(session.start_time_str);
+            const end = toMinutes(session.end_time_str);
+            const color =
+                session.id === 'tokyo' ? "bg-blue-500/30" :
+                session.id === 'london' ? "bg-yellow-500/30" :
+                "bg-green-500/30";
+
+            if (start < end) {
+                return [{
+                    id: session.id,
+                    title: `${session.name} (${session.start_time_str}-${session.end_time_str})`,
+                    leftPct: (start / 1440) * 100,
+                    widthPct: ((end - start) / 1440) * 100,
+                    color
+                }];
+            }
+
+            return [
+                {
+                    id: `${session.id}-late`,
+                    title: `${session.name} (${session.start_time_str}-24:00)`,
+                    leftPct: (start / 1440) * 100,
+                    widthPct: ((1440 - start) / 1440) * 100,
+                    color
+                },
+                {
+                    id: `${session.id}-early`,
+                    title: `${session.name} (00:00-${session.end_time_str})`,
+                    leftPct: 0,
+                    widthPct: (end / 1440) * 100,
+                    color
+                }
+            ];
+        });
+    };
+
+    const sessionBlocks = buildSessionBlocks();
+
     const fetchData = async () => {
         try {
             const result = await getSessionStatus();
@@ -83,7 +129,7 @@ const SessionPanel = () => {
                 ))}
             </div>
 
-            {/* Simple Timeline Visualization */}
+            {/* Timeline Visualization (JST 24h) */}
             <div className="relative h-2 bg-secondary rounded-full overflow-hidden mb-2">
                 {/* Current Time Indicator */}
                 <div
@@ -91,13 +137,14 @@ const SessionPanel = () => {
                     style={{ left: `${data.timeline_progress}%` }}
                 />
 
-                {/* Session Blocks (Simplified visualization, assuming simple percentages) */}
-                {/* This is a visual approximation. Real impl would calculate exact % positions based on start/end times */}
-                <div className="absolute top-0 bottom-0 left-[37.5%] w-[25%] bg-blue-500/30" title="Tokyo (09-15)" />    {/* 9/24 = 37.5% */}
-                <div className="absolute top-0 bottom-0 left-[66.6%] w-[37.5%] bg-yellow-500/30" title="London (16-01)" /> {/* 16/24 = 66.6% */}
-                {/* NY spans across midnight, easier to just show night part */}
-                <div className="absolute top-0 bottom-0 left-[87.5%] right-0 bg-green-500/30" title="NY (21-06)" />
-                <div className="absolute top-0 bottom-0 left-0 w-[25%] bg-green-500/30" title="NY (Cont.)" />
+                {sessionBlocks.map(block => (
+                    <div
+                        key={block.id}
+                        className={`absolute top-0 bottom-0 ${block.color}`}
+                        style={{ left: `${block.leftPct}%`, width: `${block.widthPct}%` }}
+                        title={block.title}
+                    />
+                ))}
             </div>
             <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
                 <span>00:00</span>
