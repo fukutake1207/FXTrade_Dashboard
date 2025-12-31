@@ -89,16 +89,33 @@ FX Discretionary Trading Cockpitは、USDJPY通貨ペアの裁量トレーダー
 - **MetaTrader 5**: インストール済み（価格データ取得用）
   - 公式サイト: https://www.metatrader5.com/
 
-## インストール
+## プロジェクトステータス
 
-### 1. リポジトリのクローン
+**現在の状態**: 📋 設計・計画フェーズ
+
+このリポジトリは現在、設計書とドキュメントを含む計画段階にあります。実装は別ブランチ（`feature/initial-setup`）で進行中で、レビュー・テスト後にmainブランチにマージされる予定です。
+
+### 現在利用可能なドキュメント
+
+- `docs/金融市場監視システム設計.md` - 詳細な設計仕様書
+- `AGENTS.md` - AI エージェント関連のドキュメント
+- `GEMINI.md` - Gemini API 統合に関するドキュメント
+- `README.md` - このファイル（プロジェクト概要）
+
+## セットアップ（実装完了後）
+
+> **注意**: 以下の手順は実装が`main`ブランチにマージされた後に有効になります。
+> 現在実装を試す場合は、`feature/initial-setup`ブランチをチェックアウトしてください。
+
+### 実装ブランチで試す場合
 
 ```bash
-git clone https://github.com/yourusername/FXTrade_Dashboard.git
+git clone https://github.com/fukutake1207/FXTrade_Dashboard.git
 cd FXTrade_Dashboard
+git checkout feature/initial-setup
 ```
 
-### 2. バックエンドのセットアップ
+### 1. バックエンドのセットアップ
 
 ```bash
 cd backend
@@ -121,7 +138,7 @@ pip install -r requirements.txt
 
 # 環境変数の設定
 # .env ファイルを作成し、以下を設定
-# CLAUDE_API_KEY=your_claude_api_key
+# ANTHROPIC_API_KEY=your_claude_api_key
 # GEMINI_API_KEY=your_gemini_api_key
 ```
 
@@ -129,7 +146,7 @@ pip install -r requirements.txt
 - `ERROR: Could not find a version that satisfies the requirement MetaTrader5`
 - このプロジェクトを非Windows環境で開発する場合は、MT5機能をモックする必要があります
 
-### 3. フロントエンドのセットアップ
+### 2. フロントエンドのセットアップ
 
 ```bash
 cd frontend
@@ -138,14 +155,14 @@ cd frontend
 npm install
 ```
 
-### 4. データベースの初期化
+### 3. データベースの初期化
 
 ```bash
 cd backend
 python -m src.init_db
 ```
 
-## 使用方法
+## 使用方法（実装完了後）
 
 ### バックエンドの起動
 
@@ -167,9 +184,22 @@ npm run dev
 
 ## プロジェクト構造
 
+### 現在の構造（mainブランチ）
+
 ```
 FXTrade_Dashboard/
-├── backend/
+├── docs/
+│   └── 金融市場監視システム設計.md  # 設計仕様書
+├── AGENTS.md                         # AI エージェント関連ドキュメント
+├── GEMINI.md                         # Gemini API 統合ドキュメント
+└── README.md                         # このファイル
+```
+
+### 計画中の構造（実装完了後）
+
+```
+FXTrade_Dashboard/
+├── backend/                   # バックエンド実装（Python FastAPI）
 │   ├── src/
 │   │   ├── routers/           # API エンドポイント
 │   │   │   ├── alerts.py      # アラート API
@@ -194,9 +224,9 @@ FXTrade_Dashboard/
 │   │   ├── models.py          # データモデル
 │   │   ├── init_db.py         # DB 初期化スクリプト
 │   │   └── main.py            # FastAPI アプリケーション
-│   ├── requirements.txt
-│   └── .env
-├── frontend/
+│   ├── requirements.txt       # Python 依存関係
+│   └── .env                   # 環境変数（要作成）
+├── frontend/                  # フロントエンド実装（React + TypeScript）
 │   ├── src/
 │   │   ├── components/        # React コンポーネント
 │   │   │   ├── AlertPanel.tsx
@@ -211,16 +241,20 @@ FXTrade_Dashboard/
 │   │   │   └── utils.ts       # ユーティリティ関数
 │   │   ├── App.tsx            # メインコンポーネント
 │   │   └── main.tsx           # エントリーポイント
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── tailwind.config.js
+│   ├── package.json           # Node.js 依存関係
+│   ├── vite.config.ts         # Vite 設定
+│   └── tailwind.config.js     # Tailwind CSS 設定
 ├── docs/
 │   └── 金融市場監視システム設計.md
-├── fx_dashboard.db            # SQLite データベース
+├── AGENTS.md
+├── GEMINI.md
+├── fx_dashboard.db            # SQLite データベース（実行時生成）
 └── README.md
 ```
 
-## 設定
+## 設定（実装完了後）
+
+> **注意**: 以下の設定は実装が完了した後に適用されます。
 
 ### API キーの設定
 
@@ -247,7 +281,9 @@ GEMINI_API_KEY=your_gemini_api_key_here
 - **ロンドンセッション**: 17:00 JST
 - **ニューヨークセッション**: 22:00 JST
 
-## 開発
+## 開発（実装完了後）
+
+> **注意**: 以下の開発手順は実装が完了した後に有効になります。
 
 ### バックエンド開発
 
@@ -276,7 +312,9 @@ npm run build
 npm run lint
 ```
 
-## APIエンドポイント
+## APIエンドポイント（実装完了後）
+
+> **注意**: 以下のAPIエンドポイントは実装が完了した後に利用可能になります。
 
 ### 価格データ
 - `GET /api/prices/weekly` - 週間価格サマリー
@@ -316,7 +354,11 @@ npm run lint
 
 | 日付 | バージョン | 変更内容 |
 |------|-----------|---------|
-| 2025-12-28 | 1.0.0 | 初版リリース |
+| 2025-12-31 | 0.2.0 | README更新：MT5パッケージ詳細情報追加、プロジェクトステータス明確化 |
+| 2025-12-30 | 0.1.0 | 実装開始（feature/initial-setupブランチ）、初期PRマージ |
+| 2025-12-28 | 0.0.1 | 初版リリース（設計書とドキュメントのみ） |
+
+**注**: バージョン1.0.0は実装が完了してmainブランチにマージされた後にリリース予定です。
 
 ## 参考資料
 
