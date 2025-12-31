@@ -198,6 +198,11 @@ export const createTrade = async (trade: Partial<TradeLog>): Promise<TradeLog> =
     return response.data;
 };
 
+export const syncTrades = async (): Promise<TradeLog[]> => {
+    const response = await api.post<TradeLog[]>('/trades/sync');
+    return response.data;
+};
+
 export const triggerDataCollection = async () => {
     const response = await api.post('/prices/collect');
     return response.data;

@@ -145,6 +145,59 @@ class MT5Service:
         df['time'] = pd.to_datetime(df['time'], unit='s')
         return df
 
+    async def get_deals(self, from_date: datetime = None, to_date: datetime = None) -> list:
+        """Get processed deals (closed trades) from history"""
+        if not self.connected:
+            # Attempt one last initialize if not connected
+            if not await self.initialize():
+                logger.error("Cannot get deals: MT5 not connected")
+                return None # Or raise exception, returning None allows caller to handle
+
+        if from_date is None:
+            from_date = datetime(2024, 1, 1) # Default to some past date
+        if to_date is None:
+            to_date = datetime.now()
+
+        # Ensure naive datetimes are handled if needed, MT5 expects somewhat flexible inputs but let's be safe
+        deals = await _run_mt5(mt5.history_deals_get, from_date, to_date)
+        
+        if deals is None:
+            logger.warning(f"No deals found or error getting deals: {mt5.last_error()}")
+            return []
+
+        processed_deals = []
+        for deal in deals:
+            # We only care about deals that are ENTRY or EXIT, but for simple log we want completed trades.
+            # Usually a 'Trade' consists of an entry deal and an exit deal.
+            # For simplicity, we can just return all deals and let the service layer process them, 
+            # OR we can just return the raw deals mapped to dicts.
+            deal_dict = deal._asdict()
+            deal_dict['time'] = datetime.fromtimestamp(deal_dict['time'])
+            processed_deals.append(deal_dict)
+            
+        return processed_deals
+
+    async def get_positions(self) -> list:
+        """Get current open positions"""
+        if not self.connected:
+             if not await self.initialize():
+                logger.error("Cannot get positions: MT5 not connected")
+                return None
+
+        positions = await _run_mt5(mt5.positions_get)
+        
+        if positions is None:
+             logger.warning(f"No positions found or error: {mt5.last_error()}")
+             return []
+        
+        processed_positions = []
+        for pos in positions:
+            pos_dict = pos._asdict()
+            pos_dict['time'] = datetime.fromtimestamp(pos_dict['time'])
+            processed_positions.append(pos_dict)
+            
+        return processed_positions
+
 mt5_service = MT5Service()
 
 # Mock patch for development/testing without MT5
@@ -192,6 +245,60 @@ class MockMT5Service:
                 "real_volume": 0
             })
         return pd.DataFrame(data)
+
+    async def get_deals(self, from_date=None, to_date=None):
+        logger.info("Mock MT5 returning dummy deals")
+        # Generate mock deals
+        dummy_deals = []
+        import uuid
+        base_time = datetime.now()
+        for i in range(5):
+             deal_time = base_time - pd.Timedelta(days=i)
+             dummy_deals.append({
+                 "ticket": 1000 + i,
+                 "order": 2000 + i,
+                 "time": deal_time,
+                 "time_msc": int(deal_time.timestamp() * 1000),
+                 "type": 1 if i % 2 == 0 else 0, # SELL / BUY
+                 "entry": 1, # OUT
+                 "magic": 0,
+                 "position_id": 3000 + i,
+                 "reason": 0,
+                 "volume": 0.1,
+                 "price": 150.0 + (i * 0.1),
+                 "commission": 0.0,
+                 "swap": 0.0,
+                 "profit": 10.0 if i % 2 == 0 else -5.0,
+                 "fee": 0.0,
+                 "symbol": "USDJPY",
+                 "comment": "Mock Deal"
+             })
+        return dummy_deals
+
+    async def get_positions(self):
+        logger.info("Mock MT5 returning dummy positions")
+        # Generate one mock open position
+        return [{
+            "ticket": 9999,
+            "time": datetime.now(),
+            "time_msc": int(datetime.now().timestamp() * 1000),
+            "time_update": int(datetime.now().timestamp()),
+            "time_update_msc": int(datetime.now().timestamp() * 1000),
+            "type": 0, # BUY
+            "magic": 0,
+            "identifier": 9999,
+            "reason": 0,
+            "volume": 0.1,
+            "price_open": 151.0,
+            "sl": 150.0,
+            "tp": 152.0,
+            "price_current": 151.2,
+            "swap": 0.0,
+            "profit": 20.0,
+            "symbol": "USDJPY",
+            "comment": "Mock Open Position",
+            "external_id": ""
+        }]
 
 # Use mock if MT5 lib works but connection fails, or prompt to use mock
 # For now, we enforce mock if connection fails or for verification:
@@ -269,12 +376,16 @@ class MT5ServiceProvider:
                 else:
                      logger.error(f"Failed to launch MT5 at {path}: {mt5.last_error()}")
 
-        # Fallback to Mock if all else fails
-        logger.warning("Real MT5 connection and auto-launch failed. Falling back to MOCK Service.")
-        self.service = MockMT5Service()
-        self.use_mock = True
-        await self.service.initialize()
-        return self.service
+        # Fallback to Mock is DISABLED strictly.
+        # logger.warning("Real MT5 connection and auto-launch failed. Falling back to MOCK Service.")
+        # self.service = MockMT5Service()
+        # self.use_mock = True
+        # await self.service.initialize()
+        # return self.service
+        
+        # Return the disconnected real service so the caller knows it failed
+        logger.error("Real MT5 connection and auto-launch failed. Mock fallback is disabled.")
+        return real_service
 
     # Proxy methods to the underlying service
     def __getattr__(self, name):
@@ -314,5 +425,13 @@ class ServiceProxy:
     async def get_historical_data(self, *args, **kwargs):
         await self._ensure_impl()
         return await self._impl.get_historical_data(*args, **kwargs)
+
+    async def get_deals(self, *args, **kwargs):
+        await self._ensure_impl()
+        return await self._impl.get_deals(*args, **kwargs)
+
+    async def get_positions(self, *args, **kwargs):
+        await self._ensure_impl()
+        return await self._impl.get_positions(*args, **kwargs)
 
 mt5_service = ServiceProxy()

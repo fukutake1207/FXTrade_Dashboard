@@ -38,7 +38,7 @@ class GeminiService:
         # Using a combined prompt for Gemini might be simpler as it supports system instructions 
         # but simple user prompt is robust enough for REST.
         
-        system_instruction = """あなたはプロフェッショナルなFXトレーダー兼アナリストです。
+        system_instruction_text = """あなたはプロフェッショナルなFXトレーダー兼アナリストです。
 提供された市場データを分析し、USDJPY（ドル円）に関する簡潔で専門的な市場ナラティブ（相場解説）を日本語で作成してください。
 以下の点に焦点を当ててください：
 1. 現在のトレンドと重要な価格レベル（レジスタンス・サポート）。
@@ -46,14 +46,15 @@ class GeminiService:
 3. 市場セッションのコンテキスト（東京/ロンドン/NY時間）。
 4. 今後数時間のシナリオと戦略。
 
-トーンは客観的かつ専門的に保ってください。箇条書きを使用して明確に記述してください。"""
+トーンは客観的かつ専門的に保ってください。箇条書きを使用して明確に記述してください。
+必ず日本語で出力してください。見出し・箇条書きも日本語にしてください。"""
 
         user_message = f"""
-Current Date/Time: {context_data.get('timestamp', 'N/A')}
-Market Data Summary:
+現在の日時: {context_data.get('timestamp', 'N/A')}
+市場データサマリー:
 {json.dumps(context_data, indent=2, ensure_ascii=False)}
 
-Please generate a market narrative based on this data.
+このデータに基づいて市場ナラティブを作成してください。
 """
 
         # Gemini REST API Format
@@ -69,20 +70,25 @@ Please generate a market narrative based on this data.
         #   "contents": [{
         #     "parts": [{"text": "..."}]
         #   }],
-        #   "system_instruction": { "parts": [{"text": "..."}] } # Optional, supported in newer models
+        #   "system_instruction": { "parts": [{"text": "..."}] } # Supported in 1.5-flash
         # }
         
         payload = {
+            "system_instruction": {
+                "parts": [
+                    {"text": system_instruction_text}
+                ]
+            },
             "contents": [
                 {
                     "parts": [
-                        {"text": f"{system_instruction}\n\n---\n\n{user_message}"} 
+                        {"text": user_message} 
                     ]
                 }
             ],
             "generationConfig": {
                 "temperature": 0.7,
-                "maxOutputTokens": 1000
+                "maxOutputTokens": 4096
             }
         }
 

@@ -54,7 +54,8 @@ const ScenarioPanel = () => {
                                     scenario.direction === 'bullish' ? "text-green-500" :
                                         scenario.direction === 'bearish' ? "text-red-500" : "text-yellow-500"
                                 )}>
-                                    {scenario.direction}
+                                    {scenario.direction === 'bullish' ? '強気' :
+                                        scenario.direction === 'bearish' ? '弱気' : '中立'}
                                 </span>
                             </div>
                             <p className="text-sm text-foreground mb-2">{scenario.description}</p>

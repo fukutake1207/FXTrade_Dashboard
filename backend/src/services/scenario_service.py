@@ -27,7 +27,7 @@ class ScenarioService:
         s2 = p - (high - low)
         
         return [
-            KeyLevel(price=p, type='pivot', description='Daily Pivot', strength=3),
+            KeyLevel(price=p, type='pivot', description='デイリーピボット', strength=3),
             KeyLevel(price=r1, type='resistance', description='R1', strength=2),
             KeyLevel(price=s1, type='support', description='S1', strength=2),
             KeyLevel(price=r2, type='resistance', description='R2', strength=1),
@@ -51,7 +51,7 @@ class ScenarioService:
                 levels.append(KeyLevel(
                     price=price, 
                     type='round', 
-                    description=f'Round Number {price:.2f}', 
+                    description=f'キリ番 {price:.2f}', 
                     strength=4
                 ))
         return levels
@@ -104,13 +104,13 @@ class ScenarioService:
             dist = (closest_resistance.price - current_price) * 100 # pips approx (yen)
             scenarios.append(MarketScenario(
                 direction='bullish',
-                description=f"Break of {closest_resistance.description} ({closest_resistance.price:.2f}) targets upside.",
+                description=f"{closest_resistance.description} ({closest_resistance.price:.2f}) 上抜けで上昇余地拡大",
                 active_levels=[closest_resistance]
             ))
         else:
              scenarios.append(MarketScenario(
                 direction='bullish',
-                description="Blue sky breakout.",
+                description="青天井の上昇トレンド",
                 active_levels=[]
             ))
             
@@ -118,13 +118,13 @@ class ScenarioService:
         if closest_support:
              scenarios.append(MarketScenario(
                 direction='bearish',
-                description=f"Break of {closest_support.description} ({closest_support.price:.2f}) targets downside.",
+                description=f"{closest_support.description} ({closest_support.price:.2f}) 下抜けで下落加速の可能性",
                 active_levels=[closest_support]
             ))
         else:
              scenarios.append(MarketScenario(
                 direction='bearish',
-                description="Free fall.",
+                description="底なしの下落トレンド",
                 active_levels=[]
             ))
 
@@ -132,7 +132,7 @@ class ScenarioService:
         if closest_resistance and closest_support:
             scenarios.append(MarketScenario(
                 direction='neutral',
-                description=f"Rangebound between {closest_support.price:.2f} and {closest_resistance.price:.2f}.",
+                description=f"{closest_support.description} ({closest_support.price:.2f}) と {closest_resistance.description} ({closest_resistance.price:.2f}) の間でのレンジ推移",
                 active_levels=[closest_support, closest_resistance]
             ))
 

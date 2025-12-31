@@ -51,7 +51,7 @@ class DataCollectorService:
         else:
             # Filter for today (UTC)
             if 'time' in df_h1.columns:
-                df_today = df_h1[df_h1['time'].dt.date == current_date]
+                df_today = df_h1[df_h1['time'].dt.date == current_date].copy()
             else:
                 df_today = pd.DataFrame() # Handle case where DF is not empty but time missing? Should not happen if get_historical returns correct DF structure
             

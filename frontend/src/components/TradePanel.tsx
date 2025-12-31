@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getTrades, getTradeStats, createTrade, TradeLog, TradeStats } from '../lib/api';
-import { ClipboardList, Plus, TrendingUp, DollarSign } from 'lucide-react';
+import { ClipboardList, Plus } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { syncTrades } from '../lib/api';
 
 const TradePanel = () => {
     const [trades, setTrades] = useState<TradeLog[]>([]);
@@ -46,6 +47,24 @@ const TradePanel = () => {
         }
     };
 
+    const handleSync = async () => {
+        setLoading(true);
+        try {
+            await syncTrades();
+            await fetchData();
+        } catch (error: any) {
+            console.error("Failed to sync trades", error);
+            // Show alert or toast
+            if (error.response?.status === 503) {
+                alert("MT5との同期に失敗しました。\nMT5が起動しているか確認してください。");
+            } else {
+                alert("同期中にエラーが発生しました。");
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -55,6 +74,13 @@ const TradePanel = () => {
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                     <ClipboardList className="w-5 h-5 text-emerald-500" /> Trade Log
+                    <button
+                        onClick={handleSync}
+                        className="text-xs bg-muted hover:bg-muted/80 text-muted-foreground px-2 py-1 rounded ml-2 border flex items-center gap-1"
+                        disabled={loading}
+                    >
+                        {loading ? "Syncing..." : "Sync MT5"}
+                    </button>
                 </h2>
                 {stats && (
                     <div className="flex gap-4 text-xs font-mono">

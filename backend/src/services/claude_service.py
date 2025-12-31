@@ -22,22 +22,23 @@ class ClaudeService:
             return "Error: ANTHROPIC_API_KEY not found in environment variables."
 
         # Construct the prompt
-        system_prompt = """You are a professional FX trader and analyst. 
-Your job is to analyze the provided market data and generate a concise, professional market narrative for USDJPY.
-Focus on:
-1. Current trend and key levels.
-2. Correlation with other assets (Gold, Nikkei, S&P500).
-3. Market session context (Tokyo/London/NY).
-4. Potential scenarios for the next few hours.
+        system_prompt = """あなたはプロのFXアナリストです。
+USDJPYの市場データを分析し、簡潔で実用的なナラティブを作成してください。
+以下の点に焦点を当ててください：
+1. 現在のトレンドと重要な価格レベル。
+2. 他の資産（ゴールド、日経平均、S&P500）との相関。
+3. 市場セッション（東京/ロンドン/NY）の状況。
+4. 今後数時間のシナリオ。
 
-Keep the tone objective and professional. Use bullet points for clarity."""
+客観的かつプロフェッショナルなトーンで記述してください。
+必ず日本語で出力してください。見出し・箇条書きも日本語にしてください。"""
 
         user_message = f"""
-Current Date/Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-Market Data Summary:
+現在の日時: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+市場データサマリー:
 {json.dumps(context_data, indent=2, ensure_ascii=False)}
 
-Please generate a market narrative based on this data.
+このデータに基づいて市場ナラティブを作成してください。
 """
 
         headers = {
