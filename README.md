@@ -70,7 +70,10 @@ FX Discretionary Trading Cockpitは、USDJPY通貨ペアの裁量トレーダー
 - **バリデーション**: Pydantic
 - **環境変数**: python-dotenv
 - **HTTP クライアント**: httpx
-- **MT5連携**: MetaTrader5 Python Package
+- **MT5連携**: MetaTrader5 Python Package (v5.0.5430)
+  - **対応Python**: 3.5以上（推奨: 3.10+）
+  - **対応OS**: Windows専用（Windows 10/11 64bit）
+  - **機能**: リアルタイム価格データ取得、履歴データ取得、ポジション管理
 - **マーケットデータ**: yfinance
 
 ### AI統合
@@ -78,9 +81,13 @@ FX Discretionary Trading Cockpitは、USDJPY通貨ペアの裁量トレーダー
 
 ## システム要件
 
-- **Python**: 3.10 以上
+- **Python**: 3.10 以上（推奨: 3.10 / 3.11 / 3.12 / 3.13）
+  - MetaTrader5 Pythonパッケージ（最新版: 5.0.5430）は Python 3.5以上をサポートしますが、最新のセキュリティと機能を考慮して3.10以上を推奨
+  - **重要**: MetaTrader5パッケージは**Windows専用**です。Mac/Linuxでは動作しません
 - **Node.js**: 18.0 以上
+- **OS**: Windows 10/11（MT5連携のため必須）
 - **MetaTrader 5**: インストール済み（価格データ取得用）
+  - 公式サイト: https://www.metatrader5.com/
 
 ## インストール
 
@@ -108,11 +115,19 @@ source .venv/bin/activate
 # 依存関係のインストール
 pip install -r requirements.txt
 
+# MT5パッケージの確認（Windows環境のみ）
+# requirements.txtに含まれていますが、個別にインストールする場合：
+# pip install MetaTrader5
+
 # 環境変数の設定
 # .env ファイルを作成し、以下を設定
 # CLAUDE_API_KEY=your_claude_api_key
 # GEMINI_API_KEY=your_gemini_api_key
 ```
+
+**注意**: MetaTrader5パッケージはWindows専用です。Mac/Linuxでは以下のエラーが発生します：
+- `ERROR: Could not find a version that satisfies the requirement MetaTrader5`
+- このプロジェクトを非Windows環境で開発する場合は、MT5機能をモックする必要があります
 
 ### 3. フロントエンドのセットアップ
 
@@ -308,7 +323,9 @@ npm run lint
 - [設計書](docs/金融市場監視システム設計.md) - 詳細な設計仕様
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [React Documentation](https://react.dev/)
-- [MetaTrader5 Python Package](https://www.mql5.com/en/docs/python_metatrader5)
+- [MetaTrader5 Python Package - PyPI](https://pypi.org/project/metatrader5/) - パッケージ情報とインストール方法
+- [MetaTrader5 Python Integration - 公式ドキュメント](https://www.mql5.com/en/docs/python_metatrader5) - API リファレンス
+- [MetaTrader5 Python インストールガイド](https://www.mql5.com/en/book/advanced/python/python_install) - セットアップ手順
 
 ---
 
