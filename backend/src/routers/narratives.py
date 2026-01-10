@@ -4,6 +4,7 @@ from sqlalchemy import select, desc
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+import pytz
 
 from ..database import get_db
 from ..models import HistoricalNarrative
@@ -26,9 +27,49 @@ class NarrativeResponse(BaseModel):
     id: str
     timestamp: datetime
     content: str
-    
+
     class Config:
         from_attributes = True
+
+class NarrativeHistoryResponse(BaseModel):
+    id: str
+    timestamp: datetime
+    session: str
+    content: str
+
+    class Config:
+        from_attributes = True
+
+@router.get("/history", response_model=List[NarrativeHistoryResponse])
+async def get_narrative_history(
+    session: Optional[str] = None,
+    limit: int = 10,
+    skip: int = 0,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get narrative history with optional session filter.
+    Returns most recent narratives first.
+    """
+    query = select(HistoricalNarrative).order_by(desc(HistoricalNarrative.generated_at))
+
+    if session:
+        query = query.where(HistoricalNarrative.session == session)
+
+    query = query.offset(skip).limit(limit)
+
+    result = await db.execute(query)
+    narratives = result.scalars().all()
+
+    return [
+        NarrativeHistoryResponse(
+            id=n.narrative_id,
+            timestamp=n.generated_at,
+            session=n.session,
+            content=n.content
+        )
+        for n in narratives
+    ]
 
 @router.get("/latest", response_model=Optional[NarrativeResponse])
 async def get_latest_narrative(db: AsyncSession = Depends(get_db)):
@@ -50,29 +91,46 @@ async def get_latest_narrative(db: AsyncSession = Depends(get_db)):
 async def generate_narrative(db: AsyncSession = Depends(get_db)):
     # 1. Gather Context Data
     # We need to gather data from various services to build the context
-    
-    # Prices (Current)
+
+    # USDJPY Current Price from MT5
+    usdjpy_tick = await mt5_service.get_current_price()
+    if not usdjpy_tick:
+        raise HTTPException(status_code=503, detail="MT5に接続できないためナラティブを生成できませんでした")
+
+    usdjpy_current = {
+        "bid": usdjpy_tick.get('bid', 0),
+        "ask": usdjpy_tick.get('ask', 0),
+        "mid": (usdjpy_tick.get('bid', 0) + usdjpy_tick.get('ask', 0)) / 2
+    }
+
+    # Prices (Current - Other Markets)
     market_prices = await market_data_service.get_current_prices()
-    
+
     # Session Status
     session_status = session_service.get_session_status()
-    
+
     # Correlations (need historical retrieval, simplified here to just reuse logic or fetch fresh)
     # For speed, let's just get the last known correlation from analyzer if cached, or recalculate quickly
-    # Re-using the logic from correlations router somewhat duplicated here, 
+    # Re-using the logic from correlations router somewhat duplicated here,
     # ideally should be in a cohesive service method.
     mt5_history = await mt5_service.get_historical_data("D1", num_bars=50)
     market_history = await market_data_service.get_historical_returns(days=30)
-    
+
     correlations = {}
     if not mt5_history.empty and not market_history.empty:
         correlations = correlation_analyzer.analyze_correlations(mt5_history, market_history)
-        
+
+    # 日本時間を取得
+    jst = pytz.timezone('Asia/Tokyo')
+    current_time_jst = datetime.now(jst)
+
     context_data = {
+        "usdjpy_current_price": usdjpy_current,
         "market_prices": market_prices,
         "correlations": correlations,
         "active_sessions": [k for k,v in session_status.items() if v.is_active],
-        "timestamp": datetime.now().isoformat()
+        "timestamp": current_time_jst.strftime('%Y年%m月%d日 %H:%M JST（日本時間）'),
+        "timezone": "Asia/Tokyo (JST, UTC+9)"
     }
     
     # 3. Call AI Provider (default: Gemini, switchable via env)

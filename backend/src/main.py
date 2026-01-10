@@ -10,15 +10,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 env_file = find_dotenv()
-logger.info(f"Loading .env from: {env_file}")
+logger.info(f"Loading environment from: {env_file}")
 load_dotenv(env_file)
 
-# Check if key is loaded immediately
+# 環境変数の検証（セキュリティのため、キーの存在は記録しない）
 key = os.getenv("GEMINI_API_KEY")
-if key:
-    logger.info("GEMINI_API_KEY loaded successfully.")
-else:
-    logger.error("GEMINI_API_KEY NOT FOUND after loading .env!")
+if not key:
+    logger.critical("Required API key not configured")
+    # 必要に応じて起動を中止することも検討
 
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import prices, trades, correlations, sessions, narratives, scenarios, alerts, settings
@@ -56,6 +55,16 @@ app.include_router(scenarios.router)
 app.include_router(alerts.router)
 app.include_router(settings.router)
 
+app.include_router(settings.router)
+
+# Mount frontend static files
+from fastapi.staticfiles import StaticFiles
+frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "dist")
+if os.path.exists(frontend_dist):
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
+else:
+    logger.warning(f"Frontend dist not found at {frontend_dist}")
+
 # Scheduler for background tasks
 scheduler = AsyncIOScheduler()
 
@@ -78,15 +87,26 @@ async def start_scheduler():
             logger.info("Starting initial data collection...")
             try:
                 async with AsyncSessionLocal() as db:
-                    await data_collector.collect_and_store_prices(db)
-                logger.info("Initial data collection completed.")
+                    success = await data_collector.collect_and_store_prices(db)
+                if success:
+                    logger.info("Initial data collection completed.")
+                else:
+                    logger.warning("Initial data collection did not complete successfully.")
             except Exception as e:
-                logger.error(f"Error during initial data collection: {e}")
-                
+                logger.error(f"Error during data collection: {e}", exc_info=True)
+
+        def handle_task_exception(task):
+            """バックグラウンドタスクの例外処理"""
+            try:
+                task.result()
+            except Exception as e:
+                logger.error(f"Background task failed: {e}", exc_info=True)
+
         # 即座に一度実行（バックグラウンドで）
         logger.info("Triggering background data collection.")
-        asyncio.create_task(run_collection())
-        
+        task = asyncio.create_task(run_collection())
+        task.add_done_callback(handle_task_exception)
+
         # 15分ごとにスケジュール
         scheduler.add_job(run_collection, 'interval', minutes=15)
         scheduler.start()
@@ -103,18 +123,30 @@ async def root():
 async def health_check():
     from .services.mt5_service import mt5_service
     from .database import engine
-    
+    from sqlalchemy import text
+
     db_status = "unknown"
+    db_healthy = False
+
     try:
-        # Simple DB check
+        # 実際にSQLを実行してDBの応答を確認
         async with engine.connect() as conn:
-            # await conn.execute("SELECT 1")
-            db_status = "connected"
+            result = await conn.execute(text("SELECT 1"))
+            row = result.fetchone()
+            if row and row[0] == 1:
+                db_status = "connected"
+                db_healthy = True
+            else:
+                db_status = "unexpected_result"
     except Exception as e:
         db_status = f"error: {str(e)}"
+        logger.error(f"Health check DB error: {e}")
+
+    # 全体の健全性判定
+    overall_healthy = db_healthy and mt5_service.connected
 
     return {
-        "status": "ok",
+        "status": "healthy" if overall_healthy else "unhealthy",
         "mt5_connected": mt5_service.connected,
         "db_status": db_status,
         "timestamp": datetime.utcnow().isoformat()

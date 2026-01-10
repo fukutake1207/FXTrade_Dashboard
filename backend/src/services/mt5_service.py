@@ -17,13 +17,25 @@ async def _run_mt5(func, *args, **kwargs):
     return await loop.run_in_executor(_mt5_executor, functools.partial(func, *args, **kwargs))
 
 class MT5Service:
+    CONNECTION_RETRY_INTERVAL = 60.0 # Seconds to wait before retrying connection
+
     def __init__(self, symbol: str = "USDJPY"):
         self.symbol = symbol
         self.connected = False
+        self.last_connection_attempt = 0
 
     async def initialize(self) -> bool:
         """Initialize connection to MT5 terminal"""
+        
+        # Circuit breaker / Backoff
+        import time
+        current_time = time.time()
+        if not self.connected and (current_time - self.last_connection_attempt < self.CONNECTION_RETRY_INTERVAL):
+            logger.debug(f"MT5 initialize skipped (backoff active). Next retry in {int(self.CONNECTION_RETRY_INTERVAL - (current_time - self.last_connection_attempt))}s")
+            return False
+
         logger.info("Initializing MT5 service...")
+        self.last_connection_attempt = current_time
         
         # Run synchronous mt5.initialize in the dedicated thread with timeout
         try:
@@ -50,7 +62,7 @@ class MT5Service:
         # Ensure symbol is selected in Market Watch
         def ensure_symbol(sym):
             if not mt5.symbol_select(sym, True):
-                print(f"WARN: Failed to select {sym}. Trying to find match...")
+                logger.warning(f"Failed to select {sym}. Trying to find match...")
                 # Try to find matching symbols (e.g. with suffixes)
                 symbols = mt5.symbols_get()
                 match = None
@@ -58,22 +70,22 @@ class MT5Service:
                     for s in symbols:
                         if "USDJPY" in s.name and "JPY" in s.name:
                             match = s.name
-                            print(f"DEBUG: Found similar symbol: {s.name}")
+                            logger.debug(f"Found similar symbol: {s.name}")
                             break
-                
+
                 if match:
-                    print(f"INFO: Switching symbol from {sym} to {match}")
+                    logger.info(f"Switching symbol from {sym} to {match}")
                     if mt5.symbol_select(match, True):
-                        print(f"INFO: Successfully selected {match}")
+                        logger.info(f"Successfully selected {match}")
                         return match
                     else:
-                        print(f"ERROR: Failed to select {match}")
+                        logger.error(f"Failed to select {match}")
                         return sym
                 else:
-                     print(f"ERROR: Symbol {sym} not found in MT5.")
+                     logger.error(f"Symbol {sym} not found in MT5.")
                      return sym
             else:
-                 print(f"DEBUG: Symbol {sym} selected successfully.")
+                 logger.debug(f"Symbol {sym} selected successfully.")
                  return sym
 
         try:
@@ -103,9 +115,18 @@ class MT5Service:
     async def get_current_price(self) -> dict:
         """Get current bid/ask price"""
         if not self.connected:
-            await self.initialize()
+            if not await self.initialize():
+                return None
 
-        tick = await _run_mt5(mt5.symbol_info_tick, self.symbol)
+        try:
+            tick = await asyncio.wait_for(
+                _run_mt5(mt5.symbol_info_tick, self.symbol),
+                timeout=5.0
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout getting tick for {self.symbol}")
+            return None
+            
         if tick is None:
             logger.error(f"Failed to get tick for {self.symbol}")
             return None
@@ -122,7 +143,8 @@ class MT5Service:
     async def get_historical_data(self, timeframe, num_bars: int = 1000) -> pd.DataFrame:
         """Get historical OHLC data"""
         if not self.connected:
-            await self.initialize()
+            if not await self.initialize():
+                return pd.DataFrame()
 
         # timeframe mapping (simplification)
         tf_map = {
@@ -144,6 +166,48 @@ class MT5Service:
         df = pd.DataFrame(rates)
         df['time'] = pd.to_datetime(df['time'], unit='s')
         return df
+
+    async def is_market_open(self) -> bool:
+        """Check if market is effectively open (connected and recent ticks)"""
+        if not self.connected:
+            if not await self.initialize():
+                return False
+
+        # check time of last quote
+        try:
+            tick = await asyncio.wait_for(
+                _run_mt5(mt5.symbol_info_tick, self.symbol),
+                timeout=5.0
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout checking market status for {self.symbol}")
+            return False
+        except Exception as e:
+            logger.error(f"Error checking market status: {e}")
+            return False
+
+        if tick is None:
+            logger.debug(f"is_market_open: Tick invalid (None) for {self.symbol}")
+            return False
+            
+        last_tick_time = datetime.fromtimestamp(tick.time)
+        now = datetime.now()
+        
+        # If the last tick is older than 5 minutes, assume market is closed
+        # Note: weekends this will definitely be true
+        diff = now - last_tick_time
+        
+        logger.debug(f"Market Status Check: Last tick: {last_tick_time}, Now: {now}, Diff: {diff.total_seconds()}s")
+
+        if diff.total_seconds() > 300: # 5 minutes
+             logger.info(f"Market considered CLOSED (Tick age: {diff.total_seconds()}s > 300s)")
+             return False
+             
+        # Also check symbol trade mode if possible
+        # info = mt5.symbol_info(self.symbol)
+        # if info.trade_mode == mt5.SYMBOL_TRADE_MODE_DISABLED: return False
+        
+        return True
 
     async def get_deals(self, from_date: datetime = None, to_date: datetime = None) -> list:
         """Get processed deals (closed trades) from history"""
@@ -200,105 +264,7 @@ class MT5Service:
 
 mt5_service = MT5Service()
 
-# Mock patch for development/testing without MT5
-import random
-class MockMT5Service:
-    def __init__(self):
-        self.connected = True
-        
-    async def initialize(self):
-        logger.info("Mock MT5 initialized")
-        return True
-        
-    async def shutdown(self):
-        pass
-        
-    async def get_current_price(self):
-        base = 150.00
-        return {
-            "symbol": "USDJPY",
-            "time": datetime.utcnow(),
-            "bid": base,
-            "ask": base + 0.01,
-            "last": base + 0.005,
-            "volume": 100
-        }
-        
-    async def get_historical_data(self, timeframe, num_bars=1000):
-        # Generate some dummy OHLC data
-        dates = pd.date_range(end=datetime.utcnow(), periods=num_bars, freq='1H')
-        data = []
-        base = 150.0
-        for d in dates:
-            o = base + random.uniform(-0.5, 0.5)
-            c = base + random.uniform(-0.5, 0.5)
-            h = max(o, c) + random.uniform(0, 0.2)
-            l = min(o, c) - random.uniform(0, 0.2)
-            data.append({
-                "time": d,
-                "open": o,
-                "high": h,
-                "low": l,
-                "close": c,
-                "tick_volume": 100,
-                "spread": 1,
-                "real_volume": 0
-            })
-        return pd.DataFrame(data)
-
-    async def get_deals(self, from_date=None, to_date=None):
-        logger.info("Mock MT5 returning dummy deals")
-        # Generate mock deals
-        dummy_deals = []
-        import uuid
-        base_time = datetime.now()
-        for i in range(5):
-             deal_time = base_time - pd.Timedelta(days=i)
-             dummy_deals.append({
-                 "ticket": 1000 + i,
-                 "order": 2000 + i,
-                 "time": deal_time,
-                 "time_msc": int(deal_time.timestamp() * 1000),
-                 "type": 1 if i % 2 == 0 else 0, # SELL / BUY
-                 "entry": 1, # OUT
-                 "magic": 0,
-                 "position_id": 3000 + i,
-                 "reason": 0,
-                 "volume": 0.1,
-                 "price": 150.0 + (i * 0.1),
-                 "commission": 0.0,
-                 "swap": 0.0,
-                 "profit": 10.0 if i % 2 == 0 else -5.0,
-                 "fee": 0.0,
-                 "symbol": "USDJPY",
-                 "comment": "Mock Deal"
-             })
-        return dummy_deals
-
-    async def get_positions(self):
-        logger.info("Mock MT5 returning dummy positions")
-        # Generate one mock open position
-        return [{
-            "ticket": 9999,
-            "time": datetime.now(),
-            "time_msc": int(datetime.now().timestamp() * 1000),
-            "time_update": int(datetime.now().timestamp()),
-            "time_update_msc": int(datetime.now().timestamp() * 1000),
-            "type": 0, # BUY
-            "magic": 0,
-            "identifier": 9999,
-            "reason": 0,
-            "volume": 0.1,
-            "price_open": 151.0,
-            "sl": 150.0,
-            "tp": 152.0,
-            "price_current": 151.2,
-            "swap": 0.0,
-            "profit": 20.0,
-            "symbol": "USDJPY",
-            "comment": "Mock Open Position",
-            "external_id": ""
-        }]
+# Mock Service removed
 
 # Use mock if MT5 lib works but connection fails, or prompt to use mock
 # For now, we enforce mock if connection fails or for verification:
@@ -306,7 +272,6 @@ class MockMT5Service:
 class MT5ServiceProvider:
     def __init__(self):
         self.service = None
-        self.use_mock = False
 
     async def get_service(self):
         if self.service:
@@ -318,21 +283,21 @@ class MT5ServiceProvider:
             # Check if it is the correct terminal
             try:
                 info = await _run_mt5(mt5.terminal_info)
-                print(f"DEBUG: Connected to MT5. Path: {info.path}")
+                logger.debug(f"Connected to MT5. Path: {info.path}")
                 logger.info(f"Connected to MT5 at {info.path}")
-                
+
                 # Check if we should enforce OANDA path
                 target_path = r"C:\Program Files\OANDA MetaTrader 5"
                 if target_path.lower() in info.path.lower():
-                     print("DEBUG: Confirmed OANDA MT5 instance.")
+                     logger.debug("Confirmed OANDA MT5 instance.")
                      self.service = real_service
                      return self.service
                 else:
-                     print(f"WARN: Connected MT5 is NOT OANDA ({info.path}). attempting to switch...")
+                     logger.warning(f"Connected MT5 is NOT OANDA ({info.path}). attempting to switch...")
                      await real_service.shutdown()
                      # Fall through to auto-launch logic
             except Exception as e:
-                print(f"DEBUG: Error checking terminal info: {e}")
+                logger.debug(f"Error checking terminal info: {e}")
             
             pass
         
@@ -349,41 +314,40 @@ class MT5ServiceProvider:
         import time
         for path in common_paths:
             if os.path.exists(path):
-                print(f"DEBUG: Found MT5 at {path}. Launching...")
+                logger.debug(f"Found MT5 at {path}. Launching...")
                 logger.info(f"Found MT5 at {path}. Launching...")
                 # Note: mt5.initialize(path=...) triggers the launch
                 # Wrap this blocking launch call!
-                if await _run_mt5(mt5.initialize, path=path):
-                     print("DEBUG: MT5 Launched. Waiting for network connection...")
-                     logger.info("MT5 Launched. Waiting for network connection...")
-                     
-                     # Wait up to 30 seconds for connection
-                     for i in range(30):
-                         info = await _run_mt5(mt5.terminal_info)
-                         if info.connected:
-                             logger.info("MT5 Connected to Server")
-                             break
-                         logger.info(f"Waiting for connection... {i+1}/30")
-                         await asyncio.sleep(1)
-                     
-                     info = await _run_mt5(mt5.terminal_info)
-                     if not info.connected:
-                         logger.warning("MT5 initialized but NOT connected to server. Data might be stale.")
+                try:
+                    if await asyncio.wait_for(
+                        _run_mt5(mt5.initialize, path=path),
+                        timeout=60.0 # Launching might take longer than simple connect
+                    ):
+                        logger.debug("MT5 Launched. Waiting for network connection...")
+                        logger.info("MT5 Launched. Waiting for network connection...")
 
-                     self.service = real_service
-                     self.service.connected = True
-                     return self.service
-                else:
-                     logger.error(f"Failed to launch MT5 at {path}: {mt5.last_error()}")
+                        # Wait up to 30 seconds for connection
+                        for i in range(30):
+                             info = await _run_mt5(mt5.terminal_info)
+                             if info.connected:
+                                 logger.info("MT5 Connected to Server")
+                                 break
+                             logger.info(f"Waiting for connection... {i+1}/30")
+                             await asyncio.sleep(1)
 
-        # Fallback to Mock is DISABLED strictly.
-        # logger.warning("Real MT5 connection and auto-launch failed. Falling back to MOCK Service.")
-        # self.service = MockMT5Service()
-        # self.use_mock = True
-        # await self.service.initialize()
-        # return self.service
-        
-        # Return the disconnected real service so the caller knows it failed
+                        info = await _run_mt5(mt5.terminal_info)
+                        if not info.connected:
+                             logger.warning("MT5 initialized but NOT connected to server. Data might be stale.")
+
+                        self.service = real_service
+                        self.service.connected = True
+                        return self.service
+                    else:
+                        logger.error(f"Failed to launch MT5 at {path}: {mt5.last_error()}")
+                except asyncio.TimeoutError:
+                    logger.error(f"MT5 launch timed out at {path}")
+
+        # Fallback to connection failure
         logger.error("Real MT5 connection and auto-launch failed. Mock fallback is disabled.")
         return real_service
 
@@ -422,6 +386,10 @@ class ServiceProxy:
         await self._ensure_impl()
         return await self._impl.get_current_price()
 
+    @property
+    def connected(self):
+        return self._impl.connected if self._impl else False
+
     async def get_historical_data(self, *args, **kwargs):
         await self._ensure_impl()
         return await self._impl.get_historical_data(*args, **kwargs)
@@ -433,5 +401,9 @@ class ServiceProxy:
     async def get_positions(self, *args, **kwargs):
         await self._ensure_impl()
         return await self._impl.get_positions(*args, **kwargs)
+
+    async def is_market_open(self):
+        await self._ensure_impl()
+        return await self._impl.is_market_open()
 
 mt5_service = ServiceProxy()

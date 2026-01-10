@@ -1,14 +1,20 @@
 from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey, Text, Date
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from .database import Base
 import json
+
+# タイムゾーンポリシー: すべてのタイムスタンプはUTCで統一
+# datetime.now(timezone.utc) を使用してタイムゾーン情報を保持
 
 class TradeLog(Base):
     __tablename__ = "trade_logs"
 
     trade_id = Column(String, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    position_id = Column(String, nullable=True, index=True)
+    entry_ticket = Column(String, nullable=True, index=True)
+    exit_ticket = Column(String, nullable=True, index=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     symbol = Column(String, default="USDJPY")
     direction = Column(String, nullable=False) # LONG or SHORT
     entry_price = Column(Float, nullable=False)
@@ -20,7 +26,7 @@ class TradeLog(Base):
     pre_trade_confidence = Column(Integer, nullable=True)
     post_trade_evaluation = Column(Text, nullable=True)
     lessons_learned = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     contexts = relationship("TradeContext", back_populates="trade")
@@ -68,3 +74,4 @@ class PriceStatistic(Base):
     close_price = Column(Float)
     range_pips = Column(Float)
     volatility = Column(Float)
+    last_updated = Column(DateTime)
