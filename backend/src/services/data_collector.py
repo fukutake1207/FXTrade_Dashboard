@@ -14,10 +14,10 @@ class DataCollectorService:
         """Collect current prices and update statistics"""
         # Ensure MT5 is connected
         logger.info("Starting Price Statistics Collection...")
-        print(f"DEBUG: Initializing MT5... Path search active.")
+        logger.debug("Initializing MT5... Path search active.")
         if not await mt5_service.initialize():
             logger.error("Could not connect to MT5 - Skipping collection")
-            return
+            return False
 
         # Get historical data for statistics calculation (last 4 weeks)
         # Using H1 data for general stats
@@ -32,6 +32,7 @@ class DataCollectorService:
         current_date = datetime.utcnow().date()
         
         stat = None
+        has_full_stats = False
         
         if df_h1.empty:
             logger.warning("No historical data received - attempting fallback to current tick")
@@ -46,7 +47,8 @@ class DataCollectorService:
                     low_price=tick['bid'],
                     close_price=tick['bid'],
                     range_pips=0,
-                    volatility=0
+                    volatility=0,
+                    last_updated=datetime.utcnow()
                 )
         else:
             # Filter for today (UTC)
@@ -67,7 +69,8 @@ class DataCollectorService:
                         low_price=tick['bid'],
                         close_price=tick['bid'],
                         range_pips=0,
-                        volatility=0
+                        volatility=0,
+                        last_updated=datetime.utcnow()
                     )
             else:
                  # Calculate detailed stats
@@ -89,12 +92,14 @@ class DataCollectorService:
                     low_price=low,
                     close_price=close_p,
                     range_pips=range_pips,
-                    volatility=volatility
+                    volatility=volatility,
+                    last_updated=datetime.utcnow()
                 )
+                has_full_stats = True
 
         if not stat:
             logger.warning("Failed to calculate statistics - no data available")
-            return
+            return False
 
         # Upsert logic (check if exists, update or insert)
         query = select(PriceStatistic).where(PriceStatistic.date == current_date)
@@ -102,11 +107,20 @@ class DataCollectorService:
         existing_stat = result.scalars().first()
 
         if existing_stat:
-            existing_stat.high_price = max(existing_stat.high_price, stat.high_price)
-            existing_stat.low_price = min(existing_stat.low_price, stat.low_price)
+            if existing_stat.high_price is None:
+                existing_stat.high_price = stat.high_price
+            else:
+                existing_stat.high_price = max(existing_stat.high_price, stat.high_price)
+            if existing_stat.low_price is None:
+                existing_stat.low_price = stat.low_price
+            else:
+                existing_stat.low_price = min(existing_stat.low_price, stat.low_price)
             existing_stat.close_price = stat.close_price
-            existing_stat.range_pips = stat.range_pips
-            existing_stat.volatility = stat.volatility
+            if has_full_stats:
+                existing_stat.range_pips = stat.range_pips
+                existing_stat.volatility = stat.volatility
+            
+            existing_stat.last_updated = stat.last_updated
         else:
              # Since stat_id is primary key, handle generation if not in basic stat
             if not stat.stat_id:
@@ -116,5 +130,6 @@ class DataCollectorService:
         
         await db.commit()
         logger.info(f"Price statistics updated for {current_date}")
+        return True
 
 data_collector = DataCollectorService()

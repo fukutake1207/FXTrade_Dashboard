@@ -24,3 +24,16 @@ AsyncSessionLocal = sessionmaker(
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
+
+# MT5接続チェック用の依存性関数
+async def require_mt5():
+    """MT5接続が必要なエンドポイント用の依存性関数"""
+    from .services.mt5_service import mt5_service
+    from fastapi import HTTPException
+
+    if not await mt5_service.initialize():
+        raise HTTPException(
+            status_code=503,
+            detail="MT5に接続できません。MT5が起動しているか確認してください。"
+        )
+    return mt5_service

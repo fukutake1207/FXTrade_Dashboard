@@ -1,11 +1,29 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'http://localhost:8000',
+    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+    timeout: 30000, // 30秒
     headers: {
         'Content-Type': 'application/json',
     },
 });
+
+// グローバルエラーハンドリング
+api.interceptors.response.use(
+    response => response,
+    error => {
+        if (error.code === 'ECONNABORTED') {
+            console.error('API request timed out:', error.config.url);
+        } else if (error.response) {
+            console.error('API error:', error.response.status, error.response.data);
+        } else if (error.request) {
+            console.error('No response from API:', error.request);
+        } else {
+            console.error('API request error:', error.message);
+        }
+        return Promise.reject(error);
+    }
+);
 
 export interface PriceStat {
     date: string;
@@ -16,6 +34,7 @@ export interface PriceStat {
     close_price: number;
     range_pips: number;
     volatility: number;
+    last_updated?: string;
 }
 
 export interface CorrelationOverview {
@@ -53,6 +72,13 @@ export interface NarrativeResponse {
     content: string;
 }
 
+export interface NarrativeHistoryItem {
+    id: string;
+    timestamp: string;
+    session: string;
+    content: string;
+}
+
 export interface NarrativeProviderResponse {
     provider: 'gemini' | 'claude';
 }
@@ -83,6 +109,9 @@ export interface AlertRule {
 
 export interface TradeLog {
     trade_id: string;
+    position_id?: string;
+    entry_ticket?: string;
+    exit_ticket?: string;
     timestamp: string;
     symbol: string;
     direction: 'LONG' | 'SHORT';
@@ -151,6 +180,20 @@ export const generateMarketNarrative = async (): Promise<NarrativeResponse> => {
     return response.data;
 };
 
+export const getNarrativeHistory = async (
+    session?: string,
+    limit: number = 10
+): Promise<NarrativeHistoryItem[]> => {
+    const params = new URLSearchParams();
+    if (session) params.append('session', session);
+    params.append('limit', limit.toString());
+
+    const response = await api.get<NarrativeHistoryItem[]>(
+        `/narratives/history?${params.toString()}`
+    );
+    return response.data;
+};
+
 export const getNarrativeProvider = async (): Promise<NarrativeProviderResponse> => {
     const response = await api.get<NarrativeProviderResponse>('/settings/narrative-provider');
     return response.data;
@@ -201,6 +244,15 @@ export const createTrade = async (trade: Partial<TradeLog>): Promise<TradeLog> =
 export const syncTrades = async (): Promise<TradeLog[]> => {
     const response = await api.post<TradeLog[]>('/trades/sync');
     return response.data;
+};
+
+export const updateTrade = async (tradeId: string, trade: Partial<TradeLog>): Promise<TradeLog> => {
+    const response = await api.put<TradeLog>(`/trades/${tradeId}`, trade);
+    return response.data;
+};
+
+export const deleteTrade = async (tradeId: string): Promise<void> => {
+    await api.delete(`/trades/${tradeId}`);
 };
 
 export const triggerDataCollection = async () => {

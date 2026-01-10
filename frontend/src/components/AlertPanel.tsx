@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getAlerts, createAlert, deleteAlert, AlertRule } from '../lib/api';
-import { Bell, Trash2, Plus, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Bell, Trash2, Plus, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const AlertPanel = () => {
@@ -61,6 +61,70 @@ const AlertPanel = () => {
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                     <Bell className="w-5 h-5 text-yellow-500" /> Price Alerts
+                    <div className="group relative">
+                        <Info className="w-3.5 h-3.5 text-muted-foreground hover:text-yellow-500 transition-colors cursor-help" />
+                        {/* Price Alerts Info Tooltip */}
+                        <div className="invisible group-hover:visible absolute left-0 top-6 z-50 w-[400px] p-4 bg-popover border border-border rounded-lg shadow-lg">
+                            <div className="space-y-3 text-xs">
+                                <div>
+                                    <h4 className="font-semibold text-foreground mb-1">Price Alerts とは</h4>
+                                    <p className="text-muted-foreground leading-relaxed">
+                                        指定した価格に到達したら通知するアラート機能。重要レベルの監視に活用
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <h4 className="font-semibold text-foreground mb-1">アラートの種類</h4>
+                                    <div className="space-y-2 text-[10px]">
+                                        <div className="flex items-start gap-2">
+                                            <span className="text-yellow-700 dark:text-yellow-400 font-semibold shrink-0">▲</span>
+                                            <div>
+                                                <div className="font-medium text-foreground">Above（上抜け）</div>
+                                                <div className="text-muted-foreground">指定価格を上回ったら通知（レジスタンスブレイク監視）</div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                            <span className="text-yellow-700 dark:text-yellow-400 font-semibold shrink-0">▼</span>
+                                            <div>
+                                                <div className="font-medium text-foreground">Below（下抜け）</div>
+                                                <div className="text-muted-foreground">指定価格を下回ったら通知（サポートブレイク監視）</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h4 className="font-semibold text-foreground mb-1">効果的な使い方</h4>
+                                    <ul className="space-y-1 text-muted-foreground leading-relaxed text-[10px]">
+                                        <li><strong className="text-foreground">✓ 重要レベル監視:</strong> ピボット、S/R、キリ番にアラート設定</li>
+                                        <li><strong className="text-foreground">✓ ブレイクアウト:</strong> レジスタンス上抜けで買いエントリー準備</li>
+                                        <li><strong className="text-foreground">✓ 損切り監視:</strong> ストップロス価格にアラート設定</li>
+                                        <li><strong className="text-foreground">✓ 利確タイミング:</strong> 目標価格到達を通知</li>
+                                    </ul>
+                                </div>
+
+                                <div>
+                                    <h4 className="font-semibold text-foreground mb-1">ステータス表示</h4>
+                                    <div className="flex gap-4 text-[10px]">
+                                        <div className="flex items-center gap-1">
+                                            <AlertCircle className="w-3 h-3 text-yellow-500" />
+                                            <span className="text-muted-foreground">待機中</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <CheckCircle2 className="w-3 h-3 text-green-500" />
+                                            <span className="text-muted-foreground">発火済み</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-border">
+                                    <p className="text-[10px] text-muted-foreground italic">
+                                        🔔 10秒ごとに価格をチェック。発火後も自動削除されないので手動で削除
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </h2>
             </div>
 

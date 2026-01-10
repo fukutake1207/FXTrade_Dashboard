@@ -67,25 +67,28 @@ class SessionService:
         minutes = (diff.seconds % 3600) // 60
         return f"{hours}h {minutes}m"
 
-    def get_session_status(self) -> Dict[str, SessionInfo]:
+    def get_session_status(self, force_closed: bool = False) -> Dict[str, SessionInfo]:
         now = datetime.now(self.timezone)
         current_time = now.time()
         
         results = {}
         for session_id, config in SESSION_DEFINITIONS.items():
-            is_active = self._is_time_in_range(current_time, config['start'], config['end'])
+            in_time_range = self._is_time_in_range(current_time, config['start'], config['end'])
             
-            status = "closed"
-            remaining = ""
-            
-            if is_active:
+            if force_closed:
+                # If market is globally closed (weekend/holiday), force everything to closed
+                status = "closed"
+                remaining = "Market Closed"
+                is_active = False
+            elif in_time_range:
                 status = "active"
                 remaining = self._get_remaining_duration(now, config['start'], config['end'])
+                is_active = True
             else:
-                # Check if it is upcoming (arbitrary definition: starts within 12 hours)
-                # For now just mark non-actives as upcoming/closed based on logic
+                # Check if it is upcoming
                 status = "upcoming"
                 remaining = self._get_upcoming_duration(now, config['start'])
+                is_active = False
 
             results[session_id] = SessionInfo(
                 id=session_id,
