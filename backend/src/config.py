@@ -3,6 +3,7 @@ Application Configuration
 中央集約的な設定管理
 """
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import List
 import os
 
@@ -28,6 +29,26 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost:3000"
     ]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """
+        CORS_ORIGINS を複数の形式で対応
+        - JSON配列形式: '["http://localhost:5173", "http://localhost:3000"]'
+        - カンマ区切り形式: 'http://localhost:5173,http://localhost:3000'
+        """
+        if isinstance(v, str):
+            # JSON形式をチェック
+            if v.startswith("["):
+                try:
+                    import json
+                    return json.loads(v)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            # カンマ区切り形式をパース
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # API Keys (必須)
     gemini_api_key: str | None = None
