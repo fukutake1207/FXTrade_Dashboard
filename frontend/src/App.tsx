@@ -78,8 +78,8 @@ function App() {
         };
     }, []);
 
-    const latestPrice = priceStats[0] || {};
-    const isUp = latestPrice.close_price >= latestPrice.open_price;
+    const latestPrice = priceStats[0];
+    const isUp = latestPrice ? latestPrice.close_price >= latestPrice.open_price : false;
 
     return (
         <div className="min-h-screen bg-background p-8">
@@ -169,12 +169,12 @@ function App() {
                         <div className="flex flex-col">
                             <div className="flex items-baseline gap-2">
                                 <span className={cn("text-2xl font-bold tracking-tight tabular-nums", isUp ? "text-green-500" : "text-red-500")}>
-                                    {latestPrice.close_price?.toFixed(2) || '---'}
+                                    {latestPrice?.close_price?.toFixed(2) || '---'}
                                 </span>
-                                {isUp ? <TrendingUp className="w-5 h-5 text-green-500" /> : <TrendingDown className="w-5 h-5 text-red-500" />}
+                                {latestPrice && (isUp ? <TrendingUp className="w-5 h-5 text-green-500" /> : <TrendingDown className="w-5 h-5 text-red-500" />)}
                             </div>
                             <span className="text-[10px] text-red-500">
-                                {latestPrice.last_updated
+                                {latestPrice?.last_updated
                                     ? new Date(latestPrice.last_updated + (latestPrice.last_updated.includes('Z') ? '' : 'Z')).toLocaleString('ja-JP')
                                     : 'No Data'}
                             </span>
@@ -184,19 +184,19 @@ function App() {
                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                             <div className="flex flex-col">
                                 <span className="text-muted-foreground text-[10px]">Open</span>
-                                <span className="font-mono font-medium tabular-nums">{latestPrice.open_price?.toFixed(2) || '--'}</span>
+                                <span className="font-mono font-medium tabular-nums">{latestPrice?.open_price?.toFixed(2) || '--'}</span>
                             </div>
                             <div className="flex flex-col">
                                 <span className="text-muted-foreground text-[10px]">High</span>
-                                <span className="font-mono font-medium tabular-nums">{latestPrice.high_price?.toFixed(2) || '--'}</span>
+                                <span className="font-mono font-medium tabular-nums">{latestPrice?.high_price?.toFixed(2) || '--'}</span>
                             </div>
                             <div className="flex flex-col">
                                 <span className="text-muted-foreground text-[10px]">Low</span>
-                                <span className="font-mono font-medium tabular-nums">{latestPrice.low_price?.toFixed(2) || '--'}</span>
+                                <span className="font-mono font-medium tabular-nums">{latestPrice?.low_price?.toFixed(2) || '--'}</span>
                             </div>
                             <div className="flex flex-col">
                                 <span className="text-muted-foreground text-[10px]">Range</span>
-                                <span className="font-mono font-medium tabular-nums">{latestPrice.range_pips?.toFixed(0) || '--'} pips</span>
+                                <span className="font-mono font-medium tabular-nums">{latestPrice?.range_pips?.toFixed(0) || '--'} pips</span>
                             </div>
                         </div>
                     </div>
