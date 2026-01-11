@@ -1,26 +1,33 @@
 from fastapi import FastAPI
-from dotenv import load_dotenv, find_dotenv
-import os
+from dotenv import load_dotenv
 import logging
 from datetime import datetime
 from .services.mt5_service import mt5_service
+from .config import settings
 
-# Configure logging to see valid output
-logging.basicConfig(level=logging.INFO)
+# Configure logging from settings
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper()),
+    format='%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-env_file = find_dotenv()
-logger.info(f"Loading environment from: {env_file}")
-load_dotenv(env_file)
+# Load environment variables
+load_dotenv()
 
-# 環境変数の検証（セキュリティのため、キーの存在は記録しない）
-key = os.getenv("GEMINI_API_KEY")
-if not key:
-    logger.critical("Required API key not configured")
-    # 必要に応じて起動を中止することも検討
+# 設定の検証（起動時に必須チェック）
+try:
+    settings.validate_required_keys()
+    logger.info("Configuration validated successfully")
+except ValueError as e:
+    logger.critical(f"Configuration Error: {e}")
+    if settings.is_production:
+        raise RuntimeError(f"Cannot start application: {e}")
+    else:
+        logger.warning("Starting in development mode despite configuration issues")
 
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import prices, trades, correlations, sessions, narratives, scenarios, alerts, settings
+from .routers import prices, trades, correlations, sessions, narratives, scenarios, alerts, settings as settings_router
 from .services.data_collector import data_collector
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
@@ -31,21 +38,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000"
-]
-
+# CORS configuration from settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Include routers (重複を削除)
 app.include_router(prices.router)
 app.include_router(trades.router)
 app.include_router(correlations.router)
@@ -53,9 +55,7 @@ app.include_router(sessions.router)
 app.include_router(narratives.router)
 app.include_router(scenarios.router)
 app.include_router(alerts.router)
-app.include_router(settings.router)
-
-app.include_router(settings.router)
+app.include_router(settings_router.router)
 
 # Mount frontend static files
 from fastapi.staticfiles import StaticFiles
@@ -107,10 +107,14 @@ async def start_scheduler():
         task = asyncio.create_task(run_collection())
         task.add_done_callback(handle_task_exception)
 
-        # 15分ごとにスケジュール
-        scheduler.add_job(run_collection, 'interval', minutes=15)
+        # 設定ファイルで指定された間隔でスケジュール（デフォルト10分）
+        scheduler.add_job(
+            run_collection,
+            'interval',
+            minutes=settings.data_collection_interval_minutes
+        )
         scheduler.start()
-        logger.info("Scheduler started.")
+        logger.info(f"Scheduler started (interval: {settings.data_collection_interval_minutes} minutes)")
     except Exception as e:
         logger.critical(f"Critical error during startup: {e}")
         # We might want to re-raise or handle this, but for now log it clearly.

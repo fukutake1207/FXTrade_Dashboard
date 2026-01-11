@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
@@ -8,19 +8,70 @@ const api = axios.create({
     },
 });
 
+// エラー通知用のカスタムイベント（オプション）
+export const apiErrorEvent = new EventTarget();
+
+export interface ApiErrorDetail {
+    message: string;
+    status?: number;
+    url?: string;
+}
+
 // グローバルエラーハンドリング
 api.interceptors.response.use(
     response => response,
-    error => {
+    (error: AxiosError) => {
+        let errorDetail: ApiErrorDetail;
+
         if (error.code === 'ECONNABORTED') {
-            console.error('API request timed out:', error.config.url);
+            errorDetail = {
+                message: 'リクエストがタイムアウトしました。サーバーの接続を確認してください。',
+                url: error.config?.url,
+            };
+            console.error('API request timed out:', error.config?.url);
         } else if (error.response) {
-            console.error('API error:', error.response.status, error.response.data);
+            // サーバーからエラーレスポンスが返された
+            const status = error.response.status;
+            const data = error.response.data as any;
+
+            let message = 'サーバーエラーが発生しました。';
+            if (status === 503) {
+                message = 'MT5接続エラー: MT5が起動していることを確認してください。';
+            } else if (status === 500) {
+                message = 'サーバー内部エラーが発生しました。';
+            } else if (status === 404) {
+                message = 'リクエストされたリソースが見つかりません。';
+            } else if (data?.detail) {
+                message = data.detail;
+            }
+
+            errorDetail = {
+                message,
+                status,
+                url: error.config?.url,
+            };
+            console.error('API error:', status, data);
         } else if (error.request) {
+            // リクエストは送信されたが、レスポンスがない
+            errorDetail = {
+                message: 'サーバーからの応答がありません。ネットワーク接続とバックエンドの起動を確認してください。',
+                url: error.config?.url,
+            };
             console.error('No response from API:', error.request);
         } else {
+            // リクエストの設定中にエラーが発生
+            errorDetail = {
+                message: `リクエストエラー: ${error.message}`,
+                url: error.config?.url,
+            };
             console.error('API request error:', error.message);
         }
+
+        // カスタムイベントをディスパッチ（コンポーネント側でリッスン可能）
+        apiErrorEvent.dispatchEvent(
+            new CustomEvent('error', { detail: errorDetail })
+        );
+
         return Promise.reject(error);
     }
 );

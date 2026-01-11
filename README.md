@@ -120,9 +120,14 @@ pip install -r requirements.txt
 # pip install MetaTrader5
 
 # 環境変数の設定
-# .env ファイルを作成し、以下を設定
-# CLAUDE_API_KEY=your_claude_api_key
-# GEMINI_API_KEY=your_gemini_api_key
+# .env.example を .env にコピーして編集
+cp .env.example .env
+
+# .envファイルで以下を設定（必須）:
+# GEMINI_API_KEY=your_gemini_api_key  # または CLAUDE_API_KEY
+# NARRATIVE_PROVIDER=gemini           # または claude
+
+# その他の設定オプションは .env.example を参照
 ```
 
 **注意**: MetaTrader5パッケージはWindows専用です。Mac/Linuxでは以下のエラーが発生します：
@@ -222,21 +227,50 @@ FXTrade_Dashboard/
 
 ## 設定
 
-### API キーの設定
+### 環境変数の設定
 
-`.env` ファイル（backend ディレクトリ）:
+`.env.example` を `.env` にコピーして、必要な値を設定してください：
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+主要な設定項目：
 
 ```env
-# Claude API（ナラティブ生成）
+# AI API Keys（必須: 使用するプロバイダーのキーが必要）
+GEMINI_API_KEY=your_gemini_api_key_here
 CLAUDE_API_KEY=your_claude_api_key_here
 
-# Gemini API（代替ナラティブ生成）
-GEMINI_API_KEY=your_gemini_api_key_here
+# ナラティブプロバイダー（gemini または claude）
+NARRATIVE_PROVIDER=gemini
+
+# 環境設定（development, staging, production）
+ENVIRONMENT=development
+
+# データベース
+DATABASE_URL=sqlite+aiosqlite:///./fx_dashboard.db
+DB_ECHO=false  # 本番環境では false 推奨
+
+# MT5設定
+MT5_SYMBOL=USDJPY
+MT5_CONNECTION_TIMEOUT=30.0
+MT5_OPERATION_TIMEOUT=10.0
+
+# データ収集間隔（分）
+DATA_COLLECTION_INTERVAL_MINUTES=10
+
+# CORS設定（カンマ区切り）
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+
+# ログ設定
+LOG_LEVEL=INFO
 ```
 
 ### データ更新頻度
 
-- **価格データ**: 10分毎
+- **価格データ**: 設定ファイルで指定（デフォルト: 10分毎）
 - **相関分析**: 10分毎
 - **重要レベル検出**: 10分毎
 - **AIナラティブ**: セッション毎（1日3回: 東京、ロンドン、ニューヨーク開場時）
@@ -316,6 +350,7 @@ npm run lint
 
 | 日付 | バージョン | 変更内容 |
 |------|-----------|---------|
+| 2026-01-10 | 1.1.0 | コードレビュー対応：設定ファイル外部化、エラーハンドリング改善、型安全性向上 |
 | 2025-12-28 | 1.0.0 | 初版リリース |
 
 ## 参考資料

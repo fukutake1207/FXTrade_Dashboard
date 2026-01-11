@@ -1,16 +1,14 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
-
-# SQLite database URL
-DATABASE_URL = "sqlite+aiosqlite:///./fx_dashboard.db"
+from .config import settings
 
 # Base class for models
 Base = declarative_base()
 
-# Async engine
+# Async engine (設定ファイルからDB URLとechoモードを取得)
 engine = create_async_engine(
-    DATABASE_URL,
-    echo=True, # Set to False in production
+    settings.database_url,
+    echo=settings.db_echo,  # 環境変数で制御（本番環境ではFalse推奨）
     future=True
 )
 

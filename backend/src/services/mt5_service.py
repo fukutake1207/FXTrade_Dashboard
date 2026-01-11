@@ -5,22 +5,40 @@ import pandas as pd
 import MetaTrader5 as mt5
 from concurrent.futures import ThreadPoolExecutor
 import functools
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
 # Create a dedicated single-thread executor for all MT5 operations to ensure thread affinity/serialization
 _mt5_executor = ThreadPoolExecutor(max_workers=1)
 
-async def _run_mt5(func, *args, **kwargs):
-    """Helper to run blocking MT5 calls in the dedicated executor"""
+async def _run_mt5(func, *args, timeout: float = None, **kwargs):
+    """
+    Helper to run blocking MT5 calls in the dedicated executor with timeout
+
+    Args:
+        func: MT5 function to call
+        timeout: Timeout in seconds (defaults to settings.mt5_operation_timeout)
+        *args, **kwargs: Arguments to pass to the function
+    """
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_mt5_executor, functools.partial(func, *args, **kwargs))
+    if timeout is None:
+        timeout = settings.mt5_operation_timeout
+
+    try:
+        return await asyncio.wait_for(
+            loop.run_in_executor(_mt5_executor, functools.partial(func, *args, **kwargs)),
+            timeout=timeout
+        )
+    except asyncio.TimeoutError:
+        logger.error(f"MT5 operation {func.__name__} timed out after {timeout}s")
+        return None
 
 class MT5Service:
-    CONNECTION_RETRY_INTERVAL = 60.0 # Seconds to wait before retrying connection
+    CONNECTION_RETRY_INTERVAL = 60.0  # Seconds to wait before retrying connection
 
-    def __init__(self, symbol: str = "USDJPY"):
-        self.symbol = symbol
+    def __init__(self, symbol: str = None):
+        self.symbol = symbol or settings.mt5_symbol
         self.connected = False
         self.last_connection_attempt = 0
 
@@ -36,24 +54,18 @@ class MT5Service:
 
         logger.info("Initializing MT5 service...")
         self.last_connection_attempt = current_time
-        
+
         # Run synchronous mt5.initialize in the dedicated thread with timeout
         try:
-            # Wrap the blocking call with a timeout at the asyncio level
-            # Note: The thread itself won't be killed, but we will stop waiting
-            init_success = await asyncio.wait_for(
-                _run_mt5(mt5.initialize),
-                timeout=30.0
+            init_success = await _run_mt5(
+                mt5.initialize,
+                timeout=settings.mt5_connection_timeout
             )
-            
+
             if not init_success:
                 logger.error(f"MT5 initialization failed, error code = {mt5.last_error()}")
                 self.connected = False
                 return False
-        except asyncio.TimeoutError:
-            logger.error("MT5 initialization timed out (30s)")
-            self.connected = False
-            return False
         except Exception as e:
             logger.error(f"MT5 initialization unexpected error: {e}")
             self.connected = False
@@ -89,18 +101,16 @@ class MT5Service:
                  return sym
 
         try:
-            self.symbol = await asyncio.wait_for(
-                _run_mt5(ensure_symbol, self.symbol),
-                timeout=10.0
-            )
-        except asyncio.TimeoutError:
-             logger.error("Symbol selection timed out")
-             # Don't fail completely, just use default symbol
-        
+            self.symbol = await _run_mt5(ensure_symbol, self.symbol, timeout=10.0)
+        except Exception as e:
+            logger.error(f"Symbol selection error: {e}")
+            # Don't fail completely, just use default symbol
+
         self.connected = True
         try:
-            terminal_info = await asyncio.wait_for(_run_mt5(mt5.terminal_info), timeout=5.0)
-            logger.info(f"MT5 initialized successfully. Terminal: {terminal_info}")
+            terminal_info = await _run_mt5(mt5.terminal_info, timeout=5.0)
+            if terminal_info:
+                logger.info(f"MT5 initialized successfully. Terminal: {terminal_info}")
         except Exception as e:
             logger.warning(f"Could not get terminal info: {e}")
             
@@ -118,15 +128,8 @@ class MT5Service:
             if not await self.initialize():
                 return None
 
-        try:
-            tick = await asyncio.wait_for(
-                _run_mt5(mt5.symbol_info_tick, self.symbol),
-                timeout=5.0
-            )
-        except asyncio.TimeoutError:
-            logger.error(f"Timeout getting tick for {self.symbol}")
-            return None
-            
+        tick = await _run_mt5(mt5.symbol_info_tick, self.symbol, timeout=5.0)
+
         if tick is None:
             logger.error(f"Failed to get tick for {self.symbol}")
             return None
@@ -155,10 +158,20 @@ class MT5Service:
             "H4": mt5.TIMEFRAME_H4,
             "D1": mt5.TIMEFRAME_D1,
         }
-        
+
         mt5_tf = tf_map.get(timeframe, mt5.TIMEFRAME_H1)
-        
-        rates = await _run_mt5(mt5.copy_rates_from_pos, self.symbol, mt5_tf, 0, num_bars)
+
+        # タイムアウトを統一（大量データの場合は長めに）
+        timeout = 15.0 if num_bars > 1000 else 10.0
+        rates = await _run_mt5(
+            mt5.copy_rates_from_pos,
+            self.symbol,
+            mt5_tf,
+            0,
+            num_bars,
+            timeout=timeout
+        )
+
         if rates is None:
             logger.error(f"Failed to get rates for {self.symbol}")
             return pd.DataFrame()
@@ -174,39 +187,25 @@ class MT5Service:
                 return False
 
         # check time of last quote
-        try:
-            tick = await asyncio.wait_for(
-                _run_mt5(mt5.symbol_info_tick, self.symbol),
-                timeout=5.0
-            )
-        except asyncio.TimeoutError:
-            logger.warning(f"Timeout checking market status for {self.symbol}")
-            return False
-        except Exception as e:
-            logger.error(f"Error checking market status: {e}")
-            return False
+        tick = await _run_mt5(mt5.symbol_info_tick, self.symbol, timeout=5.0)
 
         if tick is None:
             logger.debug(f"is_market_open: Tick invalid (None) for {self.symbol}")
             return False
-            
+
         last_tick_time = datetime.fromtimestamp(tick.time)
         now = datetime.now()
-        
+
         # If the last tick is older than 5 minutes, assume market is closed
         # Note: weekends this will definitely be true
         diff = now - last_tick_time
-        
+
         logger.debug(f"Market Status Check: Last tick: {last_tick_time}, Now: {now}, Diff: {diff.total_seconds()}s")
 
-        if diff.total_seconds() > 300: # 5 minutes
-             logger.info(f"Market considered CLOSED (Tick age: {diff.total_seconds()}s > 300s)")
-             return False
-             
-        # Also check symbol trade mode if possible
-        # info = mt5.symbol_info(self.symbol)
-        # if info.trade_mode == mt5.SYMBOL_TRADE_MODE_DISABLED: return False
-        
+        if diff.total_seconds() > 300:  # 5 minutes
+            logger.info(f"Market considered CLOSED (Tick age: {diff.total_seconds()}s > 300s)")
+            return False
+
         return True
 
     async def get_deals(self, from_date: datetime = None, to_date: datetime = None) -> list:
@@ -215,51 +214,52 @@ class MT5Service:
             # Attempt one last initialize if not connected
             if not await self.initialize():
                 logger.error("Cannot get deals: MT5 not connected")
-                return None # Or raise exception, returning None allows caller to handle
+                return None
 
         if from_date is None:
-            from_date = datetime(2024, 1, 1) # Default to some past date
+            from_date = datetime(2024, 1, 1)  # Default to some past date
         if to_date is None:
             to_date = datetime.now()
 
-        # Ensure naive datetimes are handled if needed, MT5 expects somewhat flexible inputs but let's be safe
-        deals = await _run_mt5(mt5.history_deals_get, from_date, to_date)
-        
+        # 履歴取得は時間がかかる可能性があるため、長めのタイムアウト
+        deals = await _run_mt5(
+            mt5.history_deals_get,
+            from_date,
+            to_date,
+            timeout=15.0
+        )
+
         if deals is None:
             logger.warning(f"No deals found or error getting deals: {mt5.last_error()}")
             return []
 
         processed_deals = []
         for deal in deals:
-            # We only care about deals that are ENTRY or EXIT, but for simple log we want completed trades.
-            # Usually a 'Trade' consists of an entry deal and an exit deal.
-            # For simplicity, we can just return all deals and let the service layer process them, 
-            # OR we can just return the raw deals mapped to dicts.
             deal_dict = deal._asdict()
             deal_dict['time'] = datetime.fromtimestamp(deal_dict['time'])
             processed_deals.append(deal_dict)
-            
+
         return processed_deals
 
     async def get_positions(self) -> list:
         """Get current open positions"""
         if not self.connected:
-             if not await self.initialize():
+            if not await self.initialize():
                 logger.error("Cannot get positions: MT5 not connected")
                 return None
 
-        positions = await _run_mt5(mt5.positions_get)
-        
+        positions = await _run_mt5(mt5.positions_get, timeout=5.0)
+
         if positions is None:
-             logger.warning(f"No positions found or error: {mt5.last_error()}")
-             return []
-        
+            logger.warning(f"No positions found or error: {mt5.last_error()}")
+            return []
+
         processed_positions = []
         for pos in positions:
             pos_dict = pos._asdict()
             pos_dict['time'] = datetime.fromtimestamp(pos_dict['time'])
             processed_positions.append(pos_dict)
-            
+
         return processed_positions
 
 mt5_service = MT5Service()
